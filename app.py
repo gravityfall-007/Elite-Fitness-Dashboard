@@ -436,3 +436,54 @@ elif page == "🏋️ Workout":
             st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("No workouts logged yet. Add your first one above!")
+
+
+# ═══════════════════════════════════════════════════════════
+# PAGE: PR TRACKER
+# ═══════════════════════════════════════════════════════════
+elif page == "🏆 PRs":
+    st.markdown('<div class="section-header">🏆 Personal Records</div>', unsafe_allow_html=True)
+    prs = load("pr")
+    if prs:
+        pr_df = pd.DataFrame(prs).sort_values("best_weight", ascending=False)
+        for _, row in pr_df.iterrows():
+            st.markdown(f"""
+            <div class="pr-badge">
+                <div>
+                    <div class="ex">🏋️ {row['exercise']}</div>
+                    <div style="font-size:0.75rem;color:#a78bfa">📅 {row.get('date','—')}</div>
+                </div>
+                <div class="stats">
+                    <div style="font-size:1.2rem;font-weight:800">{row['best_weight']} kg</div>
+                    <div>× {row['best_reps']} reps</div>
+                </div>
+            </div>""", unsafe_allow_html=True)
+
+        # Bar chart
+        fig = px.bar(pr_df.head(15), x="exercise", y="best_weight",
+                     title="🏆 Top PRs by Weight",
+                     color="best_weight", color_continuous_scale="Viridis",
+                     text="best_weight")
+        fig.update_traces(texttemplate="%{text}kg", textposition="outside")
+        fig.update_layout(**CHART_LAYOUT, height=400, showlegend=False,
+                          coloraxis_showscale=False,
+                          xaxis=dict(tickangle=-30))
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Manual PR entry
+        st.markdown('<div class="section-header">➕ Add / Update PR</div>', unsafe_allow_html=True)
+        with st.form("pr_form"):
+            pc1, pc2, pc3, pc4 = st.columns(4)
+            pr_ex = pc1.text_input("Exercise")
+            pr_w  = pc2.number_input("Best Weight (kg)", min_value=0.0, step=2.5)
+            pr_r  = pc3.number_input("Best Reps", min_value=1, max_value=100, value=1)
+            pr_d  = pc4.date_input("Date", value=date.today())
+            if st.form_submit_button("💾 Save PR"):
+                if pr_ex:
+                    pr_map = {p["exercise"]: p for p in prs}
+                    pr_map[pr_ex] = {"exercise": pr_ex, "best_weight": pr_w, "best_reps": pr_r, "date": str(pr_d)}
+                    save("pr", list(pr_map.values()))
+                    st.success(f"✅ PR saved for {pr_ex}")
+                    st.rerun()
+    else:
+        st.info("No PRs yet. Log workouts and PRs are auto-tracked!")
