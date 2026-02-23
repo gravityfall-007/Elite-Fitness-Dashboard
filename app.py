@@ -639,3 +639,195 @@ elif page == "🥗 Nutrition":
                 avg_cols[i].metric(f"{m.title()}", f"{week[m].mean():.0f} {u}")
     else:
         st.info("No nutrition data yet!")
+
+
+# ═══════════════════════════════════════════════════════════
+# PAGE: RECOVERY
+# ═══════════════════════════════════════════════════════════
+elif page == "😴 Recovery":
+    st.markdown('<div class="section-header">😴 Recovery System</div>', unsafe_allow_html=True)
+
+    with st.form("recovery_form"):
+        st.markdown('<div class="form-box">', unsafe_allow_html=True)
+        r_date = st.date_input("📅 Date", value=date.today())
+        c1, c2 = st.columns(2)
+        with c1:
+            r_sleep  = st.number_input("😴 Sleep Hours", 0.0, 14.0, 7.5, 0.5)
+            r_rhr    = st.number_input("❤️ Resting HR (bpm)", 30, 120, 58)
+        with c2:
+            r_stress = st.slider("🧠 Stress Level", 1, 5, 2, help="1=Low, 5=Very High")
+            r_energy = st.slider("⚡ Energy Level", 1, 5, 3, help="1=Exhausted, 5=Peak")
+        r_notes = st.text_area("📝 Notes", placeholder="Soreness, mood, sickness…", height=70)
+        st.markdown('</div>', unsafe_allow_html=True)
+        if st.form_submit_button("💾 Save Recovery"):
+            # Compute recovery score
+            sleep_score = min(r_sleep / 9 * 5, 5)
+            stress_inv  = 6 - r_stress
+            rhr_score   = max(0, 5 - (r_rhr - 50) / 10)
+            rec_score   = round((sleep_score + stress_inv + r_energy + rhr_score) / 4, 1)
+            entry = {
+                "date": str(r_date), "sleep_hours": r_sleep,
+                "stress_level": r_stress, "energy_level": r_energy,
+                "resting_hr": r_rhr, "recovery_score": rec_score, "notes": r_notes
+            }
+            d = load("recovery"); d.append(entry); save("recovery", d)
+            color = "green" if rec_score >= 4 else "orange" if rec_score >= 3 else "red"
+            st.markdown(f"""<div style="background:#13161f;border:1px solid #2a2d3e;border-radius:12px;padding:16px;text-align:center">
+                <div style="font-size:0.85rem;color:#7c8db5">Recovery Score</div>
+                <div style="font-size:3rem;font-weight:900;color:{color}">{rec_score}</div>
+                <div style="font-size:0.8rem;color:#7c8db5">out of 5.0</div>
+            </div>""", unsafe_allow_html=True)
+
+    rdf = to_df("recovery")
+    if not rdf.empty:
+        rdf["date"] = pd.to_datetime(rdf["date"])
+        rdf = rdf.sort_values("date")
+        for c in ["sleep_hours","stress_level","energy_level","resting_hr","recovery_score"]:
+            if c in rdf.columns:
+                rdf[c] = pd.to_numeric(rdf[c], errors="coerce")
+
+        fig = make_subplots(rows=2, cols=2,
+                            subplot_titles=["😴 Sleep (hrs)","⚡ Energy (1-5)","🧠 Stress (1-5)","❤️ Resting HR"])
+        pairs = [("sleep_hours","#38bdf8",1,1), ("energy_level","#facc15",1,2),
+                 ("stress_level","#f87171",2,1), ("resting_hr","#f97316",2,2)]
+        for m, c_, r, col_ in pairs:
+            if m in rdf.columns:
+                fig.add_trace(go.Scatter(x=rdf["date"], y=rdf[m],
+                                          mode="lines+markers", line_color=c_, line_width=2,
+                                          marker_size=5, name=m), row=r, col=col_)
+        fig.update_layout(**CHART_LAYOUT, height=500, showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Recovery score timeline
+        if "recovery_score" in rdf.columns:
+            fig2 = px.bar(rdf.tail(30), x="date", y="recovery_score",
+                          title="🔄 Recovery Score (last 30 days)",
+                          color="recovery_score", color_continuous_scale=["#f87171","#facc15","#4ade80"],
+                          range_color=[1, 5])
+            fig2.update_layout(**CHART_LAYOUT, height=250, coloraxis_showscale=False)
+            st.plotly_chart(fig2, use_container_width=True)
+    else:
+        st.info("No recovery data yet!")
+
+
+# ═══════════════════════════════════════════════════════════
+# PAGE: SUPPLEMENTS
+# ═══════════════════════════════════════════════════════════
+elif page == "💊 Supplements":
+    st.markdown('<div class="section-header">💊 Supplement Tracker</div>', unsafe_allow_html=True)
+
+    SUPPS = ["creatine", "vitamin_d", "omega_3", "magnesium", "zinc"]
+    SUPP_LABELS = {"creatine": "🔵 Creatine", "vitamin_d": "☀️ Vitamin D",
+                   "omega_3": "🐟 Omega 3", "magnesium": "🌙 Magnesium", "zinc": "⚡ Zinc"}
+
+    with st.form("supp_form"):
+        st.markdown('<div class="form-box">', unsafe_allow_html=True)
+        s_date = st.date_input("📅 Date", value=date.today())
+        st.markdown("**Mark taken today:**")
+        cols_ = st.columns(5)
+        checks = {}
+        for i, s in enumerate(SUPPS):
+            checks[s] = cols_[i].checkbox(SUPP_LABELS[s].split(" ")[1], value=True)
+        s_notes = st.text_input("📝 Notes", placeholder="Timing, missed dose reason…")
+        st.markdown('</div>', unsafe_allow_html=True)
+        if st.form_submit_button("💾 Log Supplements"):
+            entry = {"date": str(s_date), "notes": s_notes, **checks}
+            d = load("supplement"); d.append(entry); save("supplement", d)
+            taken = sum(checks.values())
+            st.success(f"✅ Logged! {taken}/5 supplements taken")
+
+    sdf = to_df("supplement")
+    if not sdf.empty:
+        sdf["date"] = pd.to_datetime(sdf["date"])
+        sdf = sdf.sort_values("date").tail(30)
+
+        # Compliance chart
+        for s in SUPPS:
+            if s in sdf.columns:
+                sdf[s] = sdf[s].apply(lambda x: 1 if x else 0)
+
+        sdf["compliance_pct"] = sdf[SUPPS].mean(axis=1) * 100
+        fig = px.bar(sdf, x="date", y="compliance_pct",
+                     title="💊 Daily Supplement Compliance (%)",
+                     color="compliance_pct", color_continuous_scale=["#f87171","#facc15","#4ade80"],
+                     range_color=[0, 100])
+        fig.update_layout(**CHART_LAYOUT, height=280, coloraxis_showscale=False)
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Per-supplement compliance
+        comp_data = {SUPP_LABELS[s]: sdf[s].mean() * 100 for s in SUPPS if s in sdf.columns}
+        fig2 = go.Figure(go.Bar(
+            x=list(comp_data.values()), y=list(comp_data.keys()),
+            orientation="h", marker_color=COLORS[:5],
+            text=[f"{v:.0f}%" for v in comp_data.values()], textposition="outside"
+        ))
+        fig2.update_layout(**CHART_LAYOUT, height=280, title="📊 Per-Supplement Compliance (30d)",
+                           xaxis_range=[0, 110])
+        st.plotly_chart(fig2, use_container_width=True)
+    else:
+        st.info("No supplement data yet!")
+
+
+# ═══════════════════════════════════════════════════════════
+# PAGE: HORMONE HEALTH
+# ═══════════════════════════════════════════════════════════
+elif page == "🧬 Hormones":
+    st.markdown('<div class="section-header">🧬 Hormone Health Tracker</div>', unsafe_allow_html=True)
+    st.markdown("""<div style="background:#1a1d2e;border-radius:12px;padding:14px;margin-bottom:16px;font-size:0.85rem;color:#a5b4fc">
+    🧠 Tracking these lifestyle factors directly influences <strong>testosterone</strong>, <strong>cortisol</strong>,
+    <strong>insulin sensitivity</strong>, and <strong>circadian health</strong>.
+    </div>""", unsafe_allow_html=True)
+
+    with st.form("hormone_form"):
+        st.markdown('<div class="form-box">', unsafe_allow_html=True)
+        h_date = st.date_input("📅 Date", value=date.today())
+        c1, c2 = st.columns(2)
+        with c1:
+            h_sun    = st.number_input("☀️ Sunlight Exposure (min)", 0, 300, 30, 5)
+            h_steps  = st.number_input("👟 Daily Steps", 0, 40000, 8000, 100)
+            h_alcohol = st.selectbox("🍺 Alcohol", ["None", "1 drink", "2 drinks", "3+ drinks"])
+        with c2:
+            h_train  = st.selectbox("🏋️ Training Today", ["Yes – Intense", "Yes – Moderate", "Yes – Light", "No – Rest", "No – Sick"])
+            h_sleep_q = st.slider("😴 Sleep Quality", 1, 5, 4, help="1=Poor, 5=Excellent")
+            h_libido = st.slider("⚡ Energy/Drive", 1, 5, 3, help="Proxy for hormonal health")
+        h_notes = st.text_area("📝 Notes", placeholder="Cold exposure, fasting, mood…", height=70)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        if st.form_submit_button("💾 Save Hormone Log"):
+            # Compute hormone health score
+            sun_score   = min(h_sun / 60 * 5, 5)
+            steps_score = min(h_steps / 12000 * 5, 5)
+            alc_score   = 5 if h_alcohol == "None" else 4 if h_alcohol == "1 drink" else 2 if h_alcohol == "2 drinks" else 0
+            train_score = 5 if "Intense" in h_train else 4 if "Moderate" in h_train else 3
+            h_health_score = round((sun_score + steps_score + alc_score + train_score + h_sleep_q + h_libido) / 6, 1)
+
+            entry = {
+                "date": str(h_date), "sunlight_min": h_sun, "daily_steps": h_steps,
+                "alcohol": h_alcohol, "training_status": h_train, "sleep_quality": h_sleep_q,
+                "energy_libido": h_libido, "hormone_health_score": h_health_score, "notes": h_notes
+            }
+            d = load("hormone"); d.append(entry); save("hormone", d)
+            st.success(f"✅ Logged! Hormone Health Score: {h_health_score}/5.0")
+
+    hdf = to_df("hormone")
+    if not hdf.empty:
+        hdf["date"] = pd.to_datetime(hdf["date"])
+        hdf = hdf.sort_values("date")
+
+        fig = px.area(hdf.tail(30), x="date", y="hormone_health_score",
+                      title="🧬 Hormone Health Score Trend (30d)",
+                      color_discrete_sequence=["#c084fc"])
+        fig.update_layout(**CHART_LAYOUT, height=300, yaxis_range=[0, 5])
+        st.plotly_chart(fig, use_container_width=True)
+
+        col1, col2 = st.columns(2)
+        with col1:
+            fig2 = px.line(hdf.tail(30), x="date", y="daily_steps", title="👟 Daily Steps", color_discrete_sequence=["#fb923c"])
+            fig2.update_layout(**CHART_LAYOUT, height=250)
+            st.plotly_chart(fig2, use_container_width=True)
+        with col2:
+            fig3 = px.line(hdf.tail(30), x="date", y="sunlight_min", title="☀️ Sunlight (min)", color_discrete_sequence=["#facc15"])
+            fig3.update_layout(**CHART_LAYOUT, height=250)
+            st.plotly_chart(fig3, use_container_width=True)
+    else:
+        st.info("No hormone health data yet!")
