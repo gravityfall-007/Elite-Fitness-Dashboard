@@ -184,3 +184,167 @@ for i, p in enumerate(PAGES):
 
 page = st.session_state.page
 st.markdown("---")
+
+
+# ═══════════════════════════════════════════════════════════
+# HELPERS
+# ═══════════════════════════════════════════════════════════
+CHART_LAYOUT = dict(
+    paper_bgcolor="#0d0f14", plot_bgcolor="#0d0f14",
+    font_color="#e8eaf0", margin=dict(l=10, r=10, t=30, b=10),
+    legend=dict(bgcolor="#13161f", bordercolor="#2a2d3e"),
+    xaxis=dict(gridcolor="#1e2133", zerolinecolor="#1e2133"),
+    yaxis=dict(gridcolor="#1e2133", zerolinecolor="#1e2133"),
+)
+
+COLORS = ["#6366f1", "#38bdf8", "#4ade80", "#f87171", "#fb923c", "#c084fc", "#facc15"]
+
+
+def sparkline(df, col, title="", color="#6366f1"):
+    if df.empty or col not in df.columns:
+        return None
+    fig = px.line(df, y=col, color_discrete_sequence=[color])
+    fig.update_traces(line_width=2, fill="tozeroy",
+                      fillcolor=f"rgba{tuple(list(px.colors.hex_to_rgb(color)) + [0.1])}")
+    fig.update_layout(**CHART_LAYOUT, height=80, showlegend=False,
+                      xaxis=dict(visible=False), yaxis=dict(visible=False))
+    return fig
+
+
+def card(title, value, unit="", delta=None, color="#6366f1"):
+    delta_html = ""
+    if delta is not None:
+        cls = "delta-up" if delta >= 0 else "delta-down"
+        arrow = "▲" if delta >= 0 else "▼"
+        delta_html = f'<div class="delta {cls}">{arrow} {abs(delta):.1f} {unit}</div>'
+    st.markdown(f"""
+    <div class="metric-card" style="border-top: 3px solid {color}">
+        <h3>{title}</h3>
+        <div class="value">{value}<span style="font-size:0.9rem;color:#7c8db5;font-weight:500"> {unit}</span></div>
+        {delta_html}
+    </div>""", unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════
+# PAGE: DASHBOARD
+# ═══════════════════════════════════════════════════════════
+if page == "📊 Dashboard":
+    today = date.today().isoformat()
+    st.markdown('<div class="section-header">📅 Today at a Glance</div>', unsafe_allow_html=True)
+
+    # Pull latest records
+    wdf = to_df("workout")
+    bdf = to_df("body")
+    ndf = to_df("nutrition")
+    rdf = to_df("recovery")
+    sdf = to_df("supplement")
+    hdf = to_df("hormone")
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        bw = bdf["bodyweight"].iloc[-1] if not bdf.empty and "bodyweight" in bdf else "–"
+        delta_bw = None
+        if not bdf.empty and len(bdf) > 1:
+            delta_bw = float(bdf["bodyweight"].iloc[-1]) - float(bdf["bodyweight"].iloc[-2])
+        card("⚖️ Bodyweight", bw, "kg", delta_bw, "#6366f1")
+    with c2:
+        cal = ndf["calories"].iloc[-1] if not ndf.empty and "calories" in ndf else "–"
+        card("🔥 Calories", cal, "kcal", color="#f87171")
+    with c3:
+        prot = ndf["protein"].iloc[-1] if not ndf.empty and "protein" in ndf else "–"
+        card("🥩 Protein", prot, "g", color="#4ade80")
+    with c4:
+        slp = rdf["sleep_hours"].iloc[-1] if not rdf.empty and "sleep_hours" in rdf else "–"
+        card("😴 Sleep", slp, "hrs", color="#38bdf8")
+
+    c5, c6, c7, c8 = st.columns(4)
+    with c5:
+        steps = hdf["daily_steps"].iloc[-1] if not hdf.empty and "daily_steps" in hdf else "–"
+        card("👟 Steps", steps, "", color="#fb923c")
+    with c6:
+        water = ndf["water_l"].iloc[-1] if not ndf.empty and "water_l" in ndf else "–"
+        card("💧 Water", water, "L", color="#38bdf8")
+    with c7:
+        stress = rdf["stress_level"].iloc[-1] if not rdf.empty and "stress_level" in rdf else "–"
+        card("🧠 Stress", stress, "/5", color="#f87171")
+    with c8:
+        energy = rdf["energy_level"].iloc[-1] if not rdf.empty and "energy_level" in rdf else "–"
+        card("⚡ Energy", energy, "/5", color="#facc15")
+
+    # Supplement checklist today
+    st.markdown('<div class="section-header">💊 Supplement Status</div>', unsafe_allow_html=True)
+    today_supps = [s for s in load("supplement") if s.get("date") == today]
+    sups_list = ["Creatine", "Vitamin D", "Omega 3", "Magnesium", "Zinc"]
+    if today_supps:
+        ts = today_supps[-1]
+        cols_ = st.columns(5)
+        for i, s in enumerate(sups_list):
+            key = s.lower().replace(" ", "_")
+            taken = ts.get(key, False)
+            icon = "✅" if taken else "❌"
+            cols_[i].markdown(f"<div style='text-align:center'>{icon}<br><small>{s}</small></div>",
+                              unsafe_allow_html=True)
+    else:
+        st.info("No supplement log yet today. Go to 💊 Supplements to log.")
+
+    # Charts
+    st.markdown('<div class="section-header">📈 Trends</div>', unsafe_allow_html=True)
+    col_l, col_r = st.columns(2)
+
+    with col_l:
+        if not bdf.empty and "bodyweight" in bdf:
+            bdf2 = bdf.copy()
+            bdf2["date"] = pd.to_datetime(bdf2["date"])
+            fig = px.line(bdf2.sort_values("date"), x="date", y="bodyweight",
+                          title="⚖️ Bodyweight", color_discrete_sequence=["#6366f1"])
+            fig.update_traces(line_width=2.5, mode="lines+markers", marker_size=5)
+            fig.update_layout(**CHART_LAYOUT, height=280)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No body data yet.")
+
+    with col_r:
+        if not ndf.empty and "protein" in ndf:
+            ndf2 = ndf.copy()
+            ndf2["date"] = pd.to_datetime(ndf2["date"])
+            fig2 = px.bar(ndf2.sort_values("date").tail(14), x="date", y=["calories", "protein"],
+                          title="🥗 Nutrition (last 14 days)", barmode="overlay",
+                          color_discrete_sequence=["#f87171", "#4ade80"])
+            fig2.update_layout(**CHART_LAYOUT, height=280)
+            st.plotly_chart(fig2, use_container_width=True)
+        else:
+            st.info("No nutrition data yet.")
+
+    # Weekly workout volume
+    if not wdf.empty and "volume" in wdf:
+        wdf2 = wdf.copy()
+        wdf2["date"] = pd.to_datetime(wdf2["date"])
+        wdf2["volume"] = pd.to_numeric(wdf2["volume"], errors="coerce")
+        weekly = wdf2.groupby(wdf2["date"].dt.isocalendar().week)["volume"].sum().reset_index()
+        weekly.columns = ["week", "total_volume"]
+        fig3 = px.bar(weekly.tail(12), x="week", y="total_volume",
+                      title="📦 Weekly Volume (kg lifted)", color_discrete_sequence=["#6366f1"])
+        fig3.update_layout(**CHART_LAYOUT, height=260)
+        st.plotly_chart(fig3, use_container_width=True)
+
+    # Recovery radar
+    if not rdf.empty:
+        rdf_last = rdf.iloc[-1]
+        cats = ["Sleep", "Stress (inv)", "Energy", "Recovery Score"]
+        sleep_norm = min(float(rdf_last.get("sleep_hours", 0)) / 9 * 5, 5)
+        stress_inv = 5 - float(rdf_last.get("stress_level", 5))
+        energy = float(rdf_last.get("energy_level", 0))
+        rhr = rdf_last.get("resting_hr", 60)
+        rhr_score = max(0, 5 - (float(rhr) - 50) / 10) if rhr else 2.5
+
+        fig4 = go.Figure(go.Scatterpolar(
+            r=[sleep_norm, stress_inv, energy, rhr_score],
+            theta=["Sleep Quality", "Low Stress", "Energy", "Heart Health"],
+            fill="toself", fillcolor="rgba(99,102,241,0.25)",
+            line_color="#6366f1", name="Recovery"
+        ))
+        fig4.update_layout(**CHART_LAYOUT, height=300, title="🔄 Recovery Radar",
+                           polar=dict(bgcolor="#13161f",
+                                      radialaxis=dict(visible=True, range=[0, 5], color="#7c8db5"),
+                                      angularaxis=dict(color="#7c8db5")))
+        st.plotly_chart(fig4, use_container_width=True)
