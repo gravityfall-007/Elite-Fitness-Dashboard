@@ -487,3 +487,155 @@ elif page == "🏆 PRs":
                     st.rerun()
     else:
         st.info("No PRs yet. Log workouts and PRs are auto-tracked!")
+
+
+# ═══════════════════════════════════════════════════════════
+# PAGE: BODY METRICS
+# ═══════════════════════════════════════════════════════════
+elif page == "📏 Body":
+    st.markdown('<div class="section-header">📏 Body Metrics</div>', unsafe_allow_html=True)
+
+    with st.form("body_form"):
+        st.markdown('<div class="form-box">', unsafe_allow_html=True)
+        b_date = st.date_input("📅 Date", value=date.today())
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            b_bw   = st.number_input("⚖️ Bodyweight (kg)", min_value=30.0, max_value=250.0, value=80.0, step=0.1)
+            b_bf   = st.number_input("🧬 Bodyfat %", min_value=3.0, max_value=60.0, value=20.0, step=0.5)
+        with c2:
+            b_waist = st.number_input("📐 Waist (cm)", min_value=40.0, max_value=200.0, value=85.0, step=0.5)
+            b_chest = st.number_input("💪 Chest (cm)", min_value=50.0, max_value=200.0, value=100.0, step=0.5)
+        with c3:
+            b_arms  = st.number_input("💪 Arms (cm)", min_value=20.0, max_value=80.0, value=38.0, step=0.5)
+            b_hips  = st.number_input("📏 Hips (cm)", min_value=50.0, max_value=200.0, value=95.0, step=0.5)
+        b_notes = st.text_area("📝 Notes", placeholder="Conditions, time of day, etc.", height=70)
+        st.markdown('</div>', unsafe_allow_html=True)
+        if st.form_submit_button("💾 Save Metrics"):
+            entry = {
+                "date": str(b_date), "bodyweight": b_bw, "bodyfat_pct": b_bf,
+                "waist": b_waist, "chest": b_chest, "arms": b_arms, "hips": b_hips,
+                "lean_mass": round(b_bw * (1 - b_bf / 100), 1),
+                "notes": b_notes
+            }
+            d = load("body"); d.append(entry); save("body", d)
+            st.success("✅ Body metrics saved!")
+
+    bdf = to_df("body")
+    if not bdf.empty:
+        bdf["date"] = pd.to_datetime(bdf["date"])
+        bdf = bdf.sort_values("date")
+        bdf[["bodyweight", "lean_mass", "bodyfat_pct"]] = bdf[["bodyweight", "lean_mass", "bodyfat_pct"]].apply(pd.to_numeric, errors="coerce")
+
+        # Composition chart
+        fig = make_subplots(rows=2, cols=2,
+                            subplot_titles=["⚖️ Bodyweight", "🧬 Bodyfat %", "💪 Lean Mass", "📐 Waist"])
+        metrics_plot = [("bodyweight","#6366f1"), ("bodyfat_pct","#f87171"),
+                        ("lean_mass","#4ade80"), ("waist","#fb923c")]
+        positions = [(1,1),(1,2),(2,1),(2,2)]
+        for (m, c), (r, col_) in zip(metrics_plot, positions):
+            if m in bdf.columns:
+                fig.add_trace(go.Scatter(x=bdf["date"], y=bdf[m].apply(pd.to_numeric, errors="coerce"),
+                                         mode="lines+markers", name=m, line_color=c, line_width=2), row=r, col=col_)
+        fig.update_layout(**CHART_LAYOUT, height=500, showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Latest measurements
+        latest = bdf.iloc[-1]
+        c1, c2, c3, c4 = st.columns(4)
+        with c1: card("⚖️ Bodyweight", latest.get("bodyweight","–"), "kg", color="#6366f1")
+        with c2: card("🧬 Bodyfat", latest.get("bodyfat_pct","–"), "%", color="#f87171")
+        with c3: card("💪 Lean Mass", latest.get("lean_mass","–"), "kg", color="#4ade80")
+        with c4: card("📐 Waist", latest.get("waist","–"), "cm", color="#fb923c")
+
+        st.dataframe(bdf.sort_values("date", ascending=False).head(20),
+                     use_container_width=True, hide_index=True)
+    else:
+        st.info("No body data yet. Log your first measurement!")
+
+
+# ═══════════════════════════════════════════════════════════
+# PAGE: NUTRITION
+# ═══════════════════════════════════════════════════════════
+elif page == "🥗 Nutrition":
+    st.markdown('<div class="section-header">🥗 Nutrition Log</div>', unsafe_allow_html=True)
+
+    with st.form("nutrition_form"):
+        st.markdown('<div class="form-box">', unsafe_allow_html=True)
+        n_date = st.date_input("📅 Date", value=date.today())
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            n_cal   = st.number_input("🔥 Calories (kcal)", 0, 10000, 2500, 50)
+            n_prot  = st.number_input("🥩 Protein (g)", 0, 500, 180, 5)
+        with c2:
+            n_carbs = st.number_input("🍞 Carbs (g)", 0, 1000, 250, 5)
+            n_fats  = st.number_input("🥑 Fats (g)", 0, 300, 70, 5)
+        with c3:
+            n_water = st.number_input("💧 Water (L)", 0.0, 10.0, 3.0, 0.1)
+            n_fiber = st.number_input("🌾 Fiber (g)", 0, 100, 30, 1)
+        n_notes = st.text_area("📝 Notes", placeholder="Meal quality, hunger, cravings…", height=70)
+        st.markdown('</div>', unsafe_allow_html=True)
+        if st.form_submit_button("💾 Save Nutrition"):
+            est_cal = round(n_prot * 4 + n_carbs * 4 + n_fats * 9)
+            entry = {
+                "date": str(n_date), "calories": n_cal, "protein": n_prot,
+                "carbs": n_carbs, "fats": n_fats, "water_l": n_water,
+                "fiber": n_fiber, "est_calories_from_macros": est_cal, "notes": n_notes
+            }
+            d = load("nutrition"); d.append(entry); save("nutrition", d)
+            st.success(f"✅ Saved! Est. cals from macros: {est_cal} kcal")
+
+    ndf = to_df("nutrition")
+    if not ndf.empty:
+        ndf["date"] = pd.to_datetime(ndf["date"])
+        ndf = ndf.sort_values("date")
+        for col_ in ["calories","protein","carbs","fats","water_l"]:
+            if col_ in ndf.columns:
+                ndf[col_] = pd.to_numeric(ndf[col_], errors="coerce")
+
+        # Macro pie latest
+        latest_n = ndf.iloc[-1]
+        col_l, col_r = st.columns(2)
+        with col_l:
+            if all(c in latest_n for c in ["protein","carbs","fats"]):
+                fig = go.Figure(go.Pie(
+                    labels=["Protein","Carbs","Fats"],
+                    values=[latest_n["protein"]*4, latest_n["carbs"]*4, latest_n["fats"]*9],
+                    hole=0.5,
+                    marker_colors=["#4ade80","#38bdf8","#fb923c"]
+                ))
+                fig.update_layout(**CHART_LAYOUT, height=280, title="🥧 Latest Macro Split (kcal)")
+                st.plotly_chart(fig, use_container_width=True)
+        with col_r:
+            targets = {"Calories": (n_cal, 2500), "Protein (g)": (n_prot, 180),
+                       "Water (L)": (n_water, 3.5)}
+            for label, (val, target) in targets.items():
+                pct = min(int(val / target * 100), 100)
+                color = "#4ade80" if pct >= 90 else "#facc15" if pct >= 70 else "#f87171"
+                st.markdown(f"""
+                <div style="margin-bottom:12px">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                        <span style="font-size:0.85rem">{label}</span>
+                        <span style="font-size:0.85rem;color:#7c8db5">{val} / {target}</span>
+                    </div>
+                    <div style="background:#1a1d2e;border-radius:999px;height:10px">
+                        <div style="background:{color};width:{pct}%;height:10px;border-radius:999px;transition:width 0.5s"></div>
+                    </div>
+                </div>""", unsafe_allow_html=True)
+
+        # Trend
+        fig2 = px.line(ndf.tail(30), x="date", y=["calories","protein"],
+                       title="📈 Nutrition Trends (last 30 days)",
+                       color_discrete_sequence=["#f87171","#4ade80"])
+        fig2.update_layout(**CHART_LAYOUT, height=300)
+        st.plotly_chart(fig2, use_container_width=True)
+
+        # Average stats
+        st.markdown("**📊 7-Day Averages**")
+        week = ndf.tail(7)
+        avg_cols = st.columns(4)
+        for i, (m, u, c) in enumerate([("calories","kcal","#f87171"),("protein","g","#4ade80"),
+                                        ("carbs","g","#38bdf8"),("fats","g","#fb923c")]):
+            if m in week.columns:
+                avg_cols[i].metric(f"{m.title()}", f"{week[m].mean():.0f} {u}")
+    else:
+        st.info("No nutrition data yet!")
