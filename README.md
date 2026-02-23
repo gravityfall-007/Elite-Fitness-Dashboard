@@ -14,6 +14,14 @@ All data stored **locally** as JSON files in `fitness_data/`.
 
 ---
 
+## 🔐 Authentication
+The dashboard is protected by an email/password system. 
+- **Registration**: Use the "Register" tab on the landing page to create your account.
+- **Security**: Passwords are securely hashed using `bcrypt`.
+- **Note**: If deploying to Streamlit Community Cloud, user data in JSON files is ephemeral. For permanent storage, connecting an external database is recommended.
+
+---
+
 ## ⚡ Quick Start
 
 ### Step 1 — Install Python 3.10+

@@ -15,6 +15,7 @@ from datetime import date, datetime, timedelta
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import auth
 
 # ─────────────────────────────────────────────
 # CONFIG & SETUP
@@ -184,6 +185,54 @@ for i, p in enumerate(PAGES):
 
 page = st.session_state.page
 st.markdown("---")
+
+
+def login_page():
+    st.markdown('<div class="section-header">🔑 Welcome to Elite Fitness OS</div>', unsafe_allow_html=True)
+    
+    choice = st.radio("Choose Action", ["Login", "Register"], horizontal=True)
+    
+    with st.form("auth_form"):
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        submit = st.form_submit_button(choice)
+        
+        if submit:
+            if not email or not password:
+                st.error("Please fill in all fields.")
+            else:
+                if choice == "Login":
+                    success, message = auth.login_user(email, password)
+                    if success:
+                        st.session_state.authenticated = True
+                        st.session_state.user_email = email
+                        st.success(message)
+                        st.rerun()
+                    else:
+                        st.error(message)
+                else:
+                    success, message = auth.register_user(email, password)
+                    if success:
+                        st.success(message)
+                        st.info("You can now login.")
+                    else:
+                        st.error(message)
+
+# Initialize auth state
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    login_page()
+    st.stop()
+
+# Logout button in sidebar
+with st.sidebar:
+    st.write(f"Logged in as: **{st.session_state.user_email}**")
+    if st.button("Logout"):
+        st.session_state.authenticated = False
+        st.session_state.user_email = None
+        st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════
