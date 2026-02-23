@@ -348,3 +348,91 @@ if page == "📊 Dashboard":
                                       radialaxis=dict(visible=True, range=[0, 5], color="#7c8db5"),
                                       angularaxis=dict(color="#7c8db5")))
         st.plotly_chart(fig4, use_container_width=True)
+
+
+# ═══════════════════════════════════════════════════════════
+# PAGE: WORKOUT LOG
+# ═══════════════════════════════════════════════════════════
+elif page == "🏋️ Workout":
+    st.markdown('<div class="section-header">🏋️ Log Workout</div>', unsafe_allow_html=True)
+
+    TRAINING_DAYS = ["Upper A", "Upper B", "Lower A", "Lower B", "Push", "Pull", "Legs", "Full Body", "Recovery / Mobility", "Cardio", "Rest"]
+    EXERCISES = [
+        "Bench Press", "Incline Bench", "OHP", "Dumbbell Press", "Cable Fly", "Chest Dip",
+        "Pull-Up", "Barbell Row", "Cable Row", "Lat Pulldown", "Face Pull",
+        "Squat", "Romanian Deadlift", "Leg Press", "Leg Curl", "Leg Extension", "Calf Raise",
+        "Deadlift", "Hip Thrust", "Plank", "Ab Wheel", "Lateral Raise", "Curl", "Tricep Pushdown",
+        "Other"
+    ]
+
+    with st.form("workout_form"):
+        st.markdown('<div class="form-box">', unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            w_date    = st.date_input("📅 Date", value=date.today())
+            w_day     = st.selectbox("💪 Training Day", TRAINING_DAYS)
+        with c2:
+            w_ex      = st.selectbox("🏋️ Exercise", EXERCISES)
+            w_ex_custom = st.text_input("Or type custom exercise", placeholder="e.g. Nordic Curl")
+
+        c3, c4, c5, c6 = st.columns(4)
+        with c3: w_sets   = st.number_input("Sets",   min_value=1, max_value=20, value=3)
+        with c4: w_reps   = st.number_input("Reps",   min_value=1, max_value=100, value=10)
+        with c5: w_weight = st.number_input("Weight (kg)", min_value=0.0, max_value=500.0, value=60.0, step=2.5)
+        with c6:
+            volume = round(w_sets * w_reps * w_weight, 1)
+            st.metric("📦 Volume", f"{volume} kg")
+
+        w_notes = st.text_area("📝 Notes", placeholder="RPE, fatigue, form cues…", height=80)
+        st.markdown('</div>', unsafe_allow_html=True)
+        submitted = st.form_submit_button("💾 Save Set")
+
+    if submitted:
+        exercise = w_ex_custom.strip() if w_ex_custom.strip() else w_ex
+        entry = {
+            "date": str(w_date), "training_day": w_day, "exercise": exercise,
+            "sets": int(w_sets), "reps": int(w_reps), "weight": float(w_weight),
+            "volume": volume, "notes": w_notes
+        }
+        data = load("workout")
+        data.append(entry)
+        save("workout", data)
+
+        # Auto-update PR
+        prs = load("pr")
+        pr_map = {p["exercise"]: p for p in prs}
+        if exercise not in pr_map:
+            pr_map[exercise] = {"exercise": exercise, "best_weight": w_weight, "best_reps": w_reps, "date": str(w_date)}
+        else:
+            if w_weight > pr_map[exercise]["best_weight"] or \
+               (w_weight == pr_map[exercise]["best_weight"] and w_reps > pr_map[exercise]["best_reps"]):
+                pr_map[exercise] = {"exercise": exercise, "best_weight": w_weight, "best_reps": w_reps, "date": str(w_date)}
+                st.balloons()
+                st.success("🏆 NEW PR! Auto-saved to PR Tracker!")
+        save("pr", list(pr_map.values()))
+        st.success(f"✅ Saved: {exercise} — {w_sets}×{w_reps} @ {w_weight}kg (Vol: {volume}kg)")
+
+    # History
+    st.markdown('<div class="section-header">📋 Workout History</div>', unsafe_allow_html=True)
+    wdf = to_df("workout")
+    if not wdf.empty:
+        # Filter by exercise
+        exercises_logged = ["All"] + sorted(wdf["exercise"].unique().tolist())
+        sel = st.selectbox("Filter by exercise", exercises_logged)
+        df_show = wdf if sel == "All" else wdf[wdf["exercise"] == sel]
+
+        st.dataframe(df_show.sort_values("date", ascending=False).head(50),
+                     use_container_width=True, hide_index=True)
+
+        if sel != "All":
+            df_plot = df_show.copy()
+            df_plot["date"] = pd.to_datetime(df_plot["date"])
+            df_plot["weight"] = pd.to_numeric(df_plot["weight"], errors="coerce")
+            fig = px.line(df_plot.sort_values("date"), x="date", y="weight",
+                          title=f"📈 {sel} — Weight Progression",
+                          color_discrete_sequence=["#6366f1"])
+            fig.update_traces(mode="lines+markers", line_width=2.5, marker_size=6)
+            fig.update_layout(**CHART_LAYOUT, height=300)
+            st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No workouts logged yet. Add your first one above!")
