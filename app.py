@@ -30,26 +30,45 @@ st.set_page_config(
 DATA_DIR = "fitness_data"
 os.makedirs(DATA_DIR, exist_ok=True)
 
-FILES = {
-    "workout":    os.path.join(DATA_DIR, "workouts.json"),
-    "pr":         os.path.join(DATA_DIR, "pr_tracker.json"),
-    "body":       os.path.join(DATA_DIR, "body_metrics.json"),
-    "nutrition":  os.path.join(DATA_DIR, "nutrition.json"),
-    "recovery":   os.path.join(DATA_DIR, "recovery.json"),
-    "supplement": os.path.join(DATA_DIR, "supplements.json"),
-    "hormone":    os.path.join(DATA_DIR, "hormone.json"),
-}
+def get_user_dir():
+    if "authenticated" in st.session_state and st.session_state.authenticated:
+        user_email = st.session_state.user_email
+        # Create a safe directory name from email
+        safe_email = user_email.replace("@", "_").replace(".", "_")
+        user_dir = os.path.join(DATA_DIR, safe_email)
+        os.makedirs(user_dir, exist_ok=True)
+        return user_dir
+    return None
+
+def get_file_path(key):
+    user_dir = get_user_dir()
+    if not user_dir:
+        return None
+    
+    files = {
+        "workout":    os.path.join(user_dir, "workouts.json"),
+        "pr":         os.path.join(user_dir, "pr_tracker.json"),
+        "body":       os.path.join(user_dir, "body_metrics.json"),
+        "nutrition":  os.path.join(user_dir, "nutrition.json"),
+        "recovery":   os.path.join(user_dir, "recovery.json"),
+        "supplement": os.path.join(user_dir, "supplements.json"),
+        "hormone":    os.path.join(user_dir, "hormone.json"),
+    }
+    return files.get(key)
 
 def load(key):
-    if os.path.exists(FILES[key]):
-        with open(FILES[key]) as f:
+    path = get_file_path(key)
+    if path and os.path.exists(path):
+        with open(path) as f:
             return json.load(f)
     return []
 
 
 def save(key, data):
-    with open(FILES[key], "w") as f:
-        json.dump(data, f, indent=2, default=str)
+    path = get_file_path(key)
+    if path:
+        with open(path, "w") as f:
+            json.dump(data, f, indent=2, default=str)
 
 
 def to_df(key):
