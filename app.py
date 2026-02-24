@@ -534,8 +534,8 @@ elif page == "🏆 PRs":
                      text="best_weight")
         fig.update_traces(texttemplate="%{text}kg", textposition="outside")
         fig.update_layout(**CHART_LAYOUT, height=400, showlegend=False,
-                          coloraxis_showscale=False,
-                          xaxis=dict(tickangle=-30))
+                          coloraxis_showscale=False)
+        fig.update_layout(xaxis=dict(tickangle=-30))
         st.plotly_chart(fig, use_container_width=True)
 
         # Manual PR entry
